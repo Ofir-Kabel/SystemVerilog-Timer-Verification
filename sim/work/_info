@@ -1,0 +1,84 @@
+m255
+K4
+z2
+Z0 !s99 nomlopt
+!s11f vlog 2025.1_2 2025.04, Apr  7 2025
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+Z1 dc:/VerificationCourse/LabEX/SystemVerilogProMid/ProjectFolder/scripts
+vtb_top
+Z2 2../verification/tb_top_timer.sv
+Z3 DXx6 sv_std 3 std 0 22 @5XbY]_OacJl=`ToSm<M^0
+Z4 DXx11 design_work 17 design_params_pkg 0 22 h4YfzaG4G;C8QDHR>=nV;2
+Z5 DXx11 design_work 10 design_pkg 0 22 ^>aEZFg3[4JF:e7M;U4[Z0
+DXx4 work 20 tb_top_timer_sv_unit 0 22 8a[V<WZP3M`03Nm>zf;Bo3
+Z6 !s110 1765733453
+VDg1SIo80bB@j0V0VzS_@n1
+r1
+!s85 0
+!i10b 1
+!s100 hNiSCNLVD>[biFf]5GQ_22
+I9Ga4^a[Vzg5IAW3QFmOG^3
+!s105 tb_top_timer_sv_unit
+S1
+R1
+Z7 w1765181315
+Z8 8../verification/tb_top_timer.sv
+Z9 F../verification/tb_top_timer.sv
+!i122 0
+L0 5 44
+Z10 OL;L;2025.1_2;82
+31
+Z11 !s108 1765733452.000000
+Z12 !s107 ../verification/tb_top_timer.sv|
+Z13 !s90 -sv|-work|work|-L|design_work|../verification/tb_top_timer.sv|
+!i113 0
+Z14 o-sv -work work -L design_work -L mtiAvm -L mtiRnm -L mtiOvm -L mtiUvm -L mtiUPF -L infact
+Z15 tCvgOpt 0 defaultOptions 1085220168
+Ttb_top_timer_opt
+!s11d design_pkg c:/VerificationCourse/LabEX/SystemVerilogProMid/ProjectFolder/sim/design_work 1 bus_if 1 c:/VerificationCourse/LabEX/SystemVerilogProMid/ProjectFolder/sim/design_work 
+!s110 1765733456
+V9SEnOIGZz@ndhfD8TkE7F0
+04 6 4 work tb_top fast 0
+!s102 +cover
+R0
+!s12f OEM100
+!s12b OEM100
+!s124 OEM100
+!s135 nogc
+o+cover +acc=npr -L design_work
+tCvgOpt 0 defaultOptions 1107178788
+ntb_top_timer_opt
+OL;O;2025.1_2;82
+Xtb_top_timer_sv_unit
+R2
+R3
+R4
+R5
+R6
+V8a[V<WZP3M`03Nm>zf;Bo3
+r1
+!s85 0
+!i10b 1
+!s100 G4Eb:oJ6lQWU@9UH_`ldg1
+I8a[V<WZP3M`03Nm>zf;Bo3
+!i103 1
+S1
+R1
+R7
+R8
+R9
+!i122 0
+L0 3 0
+R10
+31
+R11
+R12
+R13
+!i113 0
+R14
+R15

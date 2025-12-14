@@ -1,0 +1,247 @@
+import os
+import subprocess
+import glob
+from collections import OrderedDict
+from pathlib import Path
+import re # Needed for checking file content
+
+# Change the current working directory to the script's directory.
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# --- CONFIGURATION ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # scripts/ directory
+LAB_DIR = os.path.join(BASE_DIR, "..") # Root project directory
+DESIGN_DIR = os.path.join(LAB_DIR, "design") # design/ directory
+OUTPUT_DIR = os.path.join(LAB_DIR, "docs") # docs/ output directory
+
+# Output/Temporary files
+OUTPUT_FILE_LIST = "design.f" 
+OUTPUT_ORDER_FILE = "files_order.txt"
+TEMP_DEPS_FILE = "temp_design_deps.mk" 
+TEMP_RTL_LIST = "temp_rtl_to_sort.txt" # List of only RTL modules for iverilog
+
+# --- FILE CLASSIFICATION LOGIC (משוכתב) ---
+
+def classify_design_files():
+    """
+    Scans design/ and classifies all RTL files into ordered groups 
+    by checking the content for 'module', 'package', or 'interface' declarations.
+    """
+    search_path_v = os.path.join(DESIGN_DIR, "*.v")
+    search_path_sv = os.path.join(DESIGN_DIR, "*.sv")
+    
+    all_files = glob.glob(search_path_v) + glob.glob(search_path_sv)
+    
+    if not all_files:
+        print(f"❌ ERROR: No Design files (.v or .sv) found in {DESIGN_DIR}.")
+        return None, None, None, None
+        
+    print(f"INFO: Found {len(all_files)} total RTL files in the Design directory.")
+
+    # Lists for classified files (absolute paths)
+    interfaces = []
+    packages = []
+    rtl_modules = []
+    tb_top = []
+    
+    # Regex to check for main declarations
+    INTERFACE_REGEX = re.compile(r'^\s*interface\s', re.IGNORECASE)
+    PACKAGE_REGEX = re.compile(r'^\s*package\s', re.IGNORECASE)
+    MODULE_REGEX = re.compile(r'^\s*(module|program)\s', re.IGNORECASE)
+
+    for filepath in all_files:
+        path = os.path.abspath(filepath)
+        try:
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                head = [next(f) for _ in range(20)] # Read first 20 lines for classification
+            
+            content = " ".join(head)
+            
+            if INTERFACE_REGEX.search(content):
+                interfaces.append(path)
+            elif PACKAGE_REGEX.search(content):
+                packages.append(path)
+            elif MODULE_REGEX.search(content):
+                # Heuristic: Assume modules are RTL unless named 'top_tb' (or similar)
+                if os.path.basename(path).lower() == "top_tb.sv":
+                     tb_top.append(path)
+                else:
+                    rtl_modules.append(path)
+            
+        except Exception as e:
+            print(f"⚠️ WARNING: Could not read file {os.path.basename(filepath)}. Skipping. Error: {e}")
+            continue
+
+    print(f"INFO: Identified {len(packages)} Packages, {len(interfaces)} Interfaces, {len(rtl_modules)} RTL Modules.")
+    
+    # Return lists: Interfaces must come before Packages if Packages depend on them
+    return interfaces, packages, rtl_modules, tb_top
+
+
+# --- CORE LOGIC (משוכתב) ---
+
+def get_dependencies_and_sort():
+    """
+    Performs precise compilation sorting based on dependencies:
+    1. Compiles Interfaces. 2. Compiles Packages (depend on Interfaces). 
+    3. Topologically sorts RTL Modules. 4. Adds TB Top.
+    """
+    
+    interfaces, packages, rtl_modules, tb_top = classify_design_files()
+    
+    if interfaces is None and packages is None and rtl_modules is None:
+        return None
+        
+    # --- 1. Aggregation of Compile-First Files (A, B, C from the plan) ---
+    # The crucial order: Interfaces -> Packages
+    compile_first_list = interfaces + packages 
+    
+    if not rtl_modules:
+        print("INFO: No RTL Modules found, returning only Packages/Interfaces/TB Top.")
+        return compile_first_list + tb_top
+
+    # --- 2. Topological Sort on RTL Modules Only ---
+    print(f"\nINFO: Running iverilog for topological sort on {len(rtl_modules)} RTL Modules...")
+
+    temp_rtl_list_path = os.path.join(BASE_DIR, TEMP_RTL_LIST)
+    temp_deps_file_path = os.path.join(BASE_DIR, TEMP_DEPS_FILE)
+
+    # Create a temporary file list containing only the RTL MODULES to be sorted
+    with open(temp_rtl_list_path, 'w') as f:
+        # Write paths relative to the current working directory (scripts/) 
+        for path in rtl_modules:
+            # We use os.path.relpath here because iverilog needs the files in the input list
+            f.write(f"{os.path.relpath(path, start=BASE_DIR)}\n") 
+
+    cmd = [
+        "iverilog", 
+        "-M", TEMP_DEPS_FILE, 
+        "-y", DESIGN_DIR, # Search library directory
+        "-f", TEMP_RTL_LIST # Input file list containing only RTL modules
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True, cwd=BASE_DIR, capture_output=True, text=True)
+        
+        # Parse the dependency file generated by iverilog -M
+        all_file_paths_from_deps = []
+        with open(temp_deps_file_path, 'r') as f:
+            content = f.read()
+
+        # Extract paths and normalize (Logic from your original script)
+        for line in content.splitlines():
+            # ... [Parsing logic remains the same] ...
+            line = line.strip()
+            if ':' in line and ('.v' in line or '.sv' in line):
+                paths_in_line = line.split(':', 1)[1].strip().split()
+                all_file_paths_from_deps.extend(paths_in_line)
+            elif line.endswith(('.v', '.sv')) and ('/' in line or '\\' in line):
+                all_file_paths_from_deps.append(line)
+
+        # Normalize paths and filter to ensure only the original RTL modules are included
+        final_module_list = []
+        for path in all_file_paths_from_deps:
+            full_path = os.path.abspath(os.path.join(BASE_DIR, path))
+            if full_path in rtl_modules: 
+                final_module_list.append(full_path)
+        
+        # Remove duplicates (preserving TOP-DOWN order) and reverse to BOTTOM-UP
+        sorted_rtl_modules = list(OrderedDict.fromkeys(final_module_list))
+        sorted_rtl_modules.reverse()
+        
+        print(f"✅ Extracted and sorted {len(sorted_rtl_modules)} unique RTL Module files.")
+        
+        # --- 3. Combine the Final List (The key aggregation step) ---
+        final_sorted_list = compile_first_list + sorted_rtl_modules + tb_top
+        
+        # Cleanup temporary files
+        if os.path.exists(temp_deps_file_path): os.remove(temp_deps_file_path)
+        if os.path.exists(temp_rtl_list_path): os.remove(temp_rtl_list_path)
+        
+        return final_sorted_list
+        
+    except FileNotFoundError:
+        print("❌ ERROR: iverilog is not installed or not in PATH. Cannot proceed.")
+        return None
+    except subprocess.CalledProcessError as e:
+        print("❌ ERROR: iverilog failed during RTL topological sort. Check SystemVerilog syntax in the RTL files.")
+        error_output = e.stderr.strip() if e.stderr else e.stdout.strip()
+        print(f"   Details: {error_output}")
+        # Cleanup temporary files before exiting
+        if os.path.exists(temp_deps_file_path): os.remove(temp_deps_file_path)
+        if os.path.exists(temp_rtl_list_path): os.remove(temp_rtl_list_path)
+        return None
+    except Exception as e:
+        print(f"❌ An unexpected error occurred: {e}")
+        return None
+
+def create_output_files(sorted_file_list):
+    """Creates design.f (file list) and files_order.txt (hierarchy file) in the docs/ directory."""
+    
+    # 0. Create the output directory if it doesn't exist
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    print(f"\nINFO: Ensuring output directory {os.path.basename(OUTPUT_DIR)}/ exists.")
+
+    # --- 1. Create design.f (File List) ---
+    f_full_path = os.path.join(OUTPUT_DIR, OUTPUT_FILE_LIST)
+    
+    with open(f_full_path, 'w') as outfile:
+        outfile.write("// Automatically generated by dependency_sort.py\n")
+        outfile.write("// ** PRECISE TOPOLOGICAL SORT (4-Stage Compilation Order) **\n")
+        outfile.write("// Order: 1. Interfaces -> 2. Packages -> 3. Sorted RTL Modules -> 4. TB Top\n\n")
+        
+        # We manually add comments to the .f file for clarity (optional, but professional)
+        current_group = ""
+        for file_path in sorted_file_list:
+            relative_path = os.path.relpath(file_path, start=LAB_DIR)
+            
+            # Determine the group for professional commentary
+            filename = os.path.basename(file_path)
+            new_group = ""
+            if "interface" in filename.lower() or "if" in filename.lower():
+                new_group = "Interfaces"
+            elif "pkg" in filename.lower():
+                new_group = "Packages"
+            elif "top_tb" in filename.lower():
+                new_group = "TB Top"
+            else:
+                new_group = "RTL Modules"
+
+            if new_group != current_group:
+                outfile.write(f"\n// --- {new_group} ---\n")
+                current_group = new_group
+            
+            outfile.write(f"{relative_path}\n")
+            
+    print(f"✅ Created FILE LIST: {OUTPUT_FILE_LIST} in {os.path.basename(OUTPUT_DIR)}/")
+    
+    # --- 2. Create files_order.txt (Clear, human-readable order file) ---
+    order_full_path = os.path.join(OUTPUT_DIR, OUTPUT_ORDER_FILE)
+    with open(order_full_path, 'w') as orderfile:
+        orderfile.write("# Topological File Order (4-Stage Compilation Order):\n")
+        orderfile.write("# The order ensures: Interfaces -> Packages (depend on IFs) -> Sorted RTL -> TB Top.\n\n")
+        for idx, file_path in enumerate(sorted_file_list):
+            relative_path = os.path.relpath(file_path, start=LAB_DIR)
+            orderfile.write(f"[{idx+1:02d}] {relative_path}\n")
+            
+    print(f"✅ Created ORDER file: {OUTPUT_ORDER_FILE} in {os.path.basename(OUTPUT_DIR)}/")
+
+# --- EXECUTION ---
+if __name__ == "__main__":
+    
+    ordered_files = get_dependencies_and_sort()
+    
+    if ordered_files:
+        print("\n--- GENERATED FILES SUMMARY ---")
+        
+        print("Final Compilation Order (Interfaces -> Packages -> Sorted RTL -> TB Top):") 
+        for idx, file_path in enumerate(ordered_files):
+            print(f"   [{idx+1:02d}] {os.path.basename(file_path)}")
+        
+        create_output_files(ordered_files)
+        
+        print("\n--- NEXT STEP (Using the .f file) ---")
+        print(f"To compile all Design modules in the correct order, please:")
+        print(f"1. Change to the project root directory (cd {os.path.basename(LAB_DIR)}/)")
+        print("2. Run the compilation command (using VCS as an example):")
+        print(f"-> vlog -sv -f docs/{OUTPUT_FILE_LIST}")

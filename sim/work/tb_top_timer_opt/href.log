@@ -1,0 +1,8 @@
+BEGIN 3:bus_if:fast__2:design_work
+    addr :  1:tb_top:fast:work
+    rdata :  1:tb_top:fast:work
+    gnt :  1:tb_top:fast:work
+    wdata :  1:tb_top:fast:work
+    write_en :  1:tb_top:fast:work
+    req :  1:tb_top:fast:work
+END 

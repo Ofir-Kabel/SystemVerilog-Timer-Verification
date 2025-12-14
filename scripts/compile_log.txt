@@ -1,0 +1,55 @@
+Reading pref.tcl
+
+# 2025.1_2
+
+# do {c:\VerificationCourse\LabEX\SystemVerilogProMid\ProjectFolder\scripts\compile.do}
+# filef0a6e40
+# tb_top_timer
+
+--- INFO: Compiling design for testbench: tb_top_timer ---
+
+# QuestaSim-64 vmap 2025.1_2 Lib Mapping Utility 2025.04 Apr  7 2025
+# vmap work ../sim/work 
+# Modifying modelsim.ini
+# QuestaSim-64 vmap 2025.1_2 Lib Mapping Utility 2025.04 Apr  7 2025
+# vmap design_work ../sim/design_work 
+# Modifying modelsim.ini
+# QuestaSim-64 vlog 2025.1_2 Compiler 2025.04 Apr  7 2025
+# Start time: 17:53:36 on Nov 27,2025
+# vlog -sv -work design_work ../design/design_params_pkg.sv 
+# -- Compiling package design_params_pkg
+# 
+# Top level modules:
+# 	--none--
+# End time: 17:53:36 on Nov 27,2025, Elapsed time: 0:00:00
+# Errors: 0, Warnings: 0
+# QuestaSim-64 vlog 2025.1_2 Compiler 2025.04 Apr  7 2025
+# Start time: 17:53:36 on Nov 27,2025
+# vlog -sv -work design_work -L design_work ../design/module_pkg.sv 
+# -- Compiling package module_pkg_sv_unit
+# -- Importing package design_params_pkg
+# -- Compiling interface bus_if
+# -- Compiling module timer_periph
+# 
+# Top level modules:
+# 	timer_periph
+# End time: 17:53:36 on Nov 27,2025, Elapsed time: 0:00:00
+# Errors: 0, Warnings: 0
+# QuestaSim-64 vlog 2025.1_2 Compiler 2025.04 Apr  7 2025
+# Start time: 17:53:36 on Nov 27,2025
+# vlog -sv -work design_work -L design_work ../design/design_pkg.sv 
+# -- Compiling package design_pkg
+# -- Importing package design_params_pkg
+# ** Error (suppressible): (vlog-13276) ../design/RefDutTimer.sv(40:12): Could not find field/method name (addr) in 'm_tr' of 'm_tr.addr'.
+# ** Error (suppressible): (vlog-13276) ../design/RefDutTimer.sv(69:12): Could not find field/method name (addr) in 'm_tr' of 'm_tr.addr'.
+# ** Warning: ../design/RefDutTimer.sv(114): (vlog-2240) Treating stand-alone use of function 'write_ref' as an implicit VOID cast.
+# ** Warning: ../design/RefDutTimer.sv(116): (vlog-2240) Treating stand-alone use of function 'read_ref' as an implicit VOID cast.
+# ** Error (suppressible): (vlog-13276) ../design/Driver.sv(55:12): Could not find field/method name (data) in 'm_drv_trans' of 'm_drv_trans.data'.
+# End time: 17:53:36 on Nov 27,2025, Elapsed time: 0:00:00
+# Errors: 3, Warnings: 2
+# ** Error: C:/questasim64_2025.1_2/win64/vlog failed.
+# Error in macro c:\VerificationCourse\LabEX\SystemVerilogProMid\ProjectFolder\scripts\compile.do line 28
+# C:/questasim64_2025.1_2/win64/vlog failed.
+#     while executing
+# "vlog -sv -work design_work -L design_work $DESIGN_LAB/design_pkg.sv"
+QuestaSim> 

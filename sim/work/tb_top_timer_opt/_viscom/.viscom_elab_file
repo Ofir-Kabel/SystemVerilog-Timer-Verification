@@ -1,0 +1,1 @@
+C:/questasim64_2025.1_2/win64/VisualizerRls/bin/viscom.exe -nolock -quiet -jmem_size 3440928 +cover +acc=npr -L design_work -o tb_top_timer_opt work.tb_top +__betafsm
