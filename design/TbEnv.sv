@@ -71,6 +71,18 @@ class TbEnv;
 	endtask
 
 	//-----------------------------------------------------------------------
+	// Accessor Methods (Getters)
+	//-----------------------------------------------------------------------
+	function mailbox #(BusTrans) get_seq_drv_mb();
+		return m_seq_drv_mb;
+	endfunction
+
+	function mailbox #(BusTrans) get_seq_ref_mb();
+		return m_seq_ref_mb;
+	endfunction
+
+
+	//-----------------------------------------------------------------------
 	// TASK: run
 	//
 	// DESCRIPTION:

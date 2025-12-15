@@ -39,7 +39,7 @@ class BaseTest;
 	function new(input virtual bus_if.bus_if i_vif);
 		m_vif = i_vif;
 		m_env = new(m_vif);
-		m_seq = new(m_env.m_seq_drv_mb, m_env.m_seq_ref_mb);
+		m_seq = new(m_env.get_seq_drv_mb(), m_env.get_seq_ref_mb());
 	endfunction
 
     // --- Global Reset Task ---
