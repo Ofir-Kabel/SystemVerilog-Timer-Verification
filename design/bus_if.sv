@@ -1,3 +1,14 @@
+//-----------------------------------------------------------------------
+// FILE: bus_if.sv
+//
+// DESCRIPTION:
+//   Bus interface with clocking blocks for driver and monitor.
+//   Includes SystemVerilog Assertions for protocol checking.
+//
+// AUTHOR: Ofir Kabel
+// DATE: 2025-12-15
+//-----------------------------------------------------------------------
+
 `timescale 1ns/1ns
 
 import design_params_pkg::*;

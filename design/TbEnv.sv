@@ -1,48 +1,92 @@
+//-----------------------------------------------------------------------
+// FILE: TbEnv.sv
+//
+// DESCRIPTION:
+//   Testbench environment that instantiates and connects all verification
+//   components (driver, monitor, scoreboard, reference model).
+//
+// AUTHOR: Ofir Kabel
+// DATE: 2025-12-15
+//-----------------------------------------------------------------------
+
+//-----------------------------------------------------------------------
+// CLASS: TbEnv
+//
+// DESCRIPTION:
+//   Top-level verification environment. Creates and connects all
+//   components through mailboxes and virtual interface.
+//-----------------------------------------------------------------------
 class TbEnv;
 
-    mailbox #(BusTrans) seq_drv_mb, seq_ref_mb, ref_sb_mb, mon_sb_mb;
-    Driver drv;
-    RefDutTimer ref_model;
-    Scoreboard sb;
-    Monitor mon;
-    virtual bus_if vif;
+	//-----------------------------------------------------------------------
+	// Properties (Class Members)
+	//-----------------------------------------------------------------------
+	local mailbox #(BusTrans) m_seq_drv_mb;
+	local mailbox #(BusTrans) m_seq_ref_mb;
+	local mailbox #(BusTrans) m_ref_sb_mb;
+	local mailbox #(BusTrans) m_mon_sb_mb;
+	local Driver m_drv;
+	local RefDutTimer m_ref_model;
+	local Scoreboard m_sb;
+	local Monitor m_mon;
+	local virtual bus_if m_vif;
 
-    //constractor
-    function new(input virtual bus_if i_vif);
-        vif = i_vif;
-        seq_drv_mb  = new(1);
-        seq_ref_mb  = new(1);
-        ref_sb_mb= new(1);
-        mon_sb_mb= new(1);
+	//-----------------------------------------------------------------------
+	// FCN: new
+	//
+	// DESCRIPTION:
+	//   Constructor for TbEnv class. Creates all components and mailboxes.
+	//
+	// PARAMETERS:
+	//   i_vif - (input) Virtual interface to DUT
+	//-----------------------------------------------------------------------
+	function new(input virtual bus_if i_vif);
+		m_vif = i_vif;
+		m_seq_drv_mb = new(1);
+		m_seq_ref_mb = new(1);
+		m_ref_sb_mb = new(1);
+		m_mon_sb_mb = new(1);
 
-        mon = new( vif , mon_sb_mb);
-        drv = new( vif , seq_drv_mb, mon);
-        ref_model = new( seq_ref_mb , ref_sb_mb ,i_vif);
-        sb = new( ref_sb_mb , mon_sb_mb);
- 
+		m_mon = new(m_vif, m_mon_sb_mb);
+		m_drv = new(m_vif, m_seq_drv_mb, m_mon);
+		m_ref_model = new(m_seq_ref_mb, m_ref_sb_mb, i_vif);
+		m_sb = new(m_ref_sb_mb, m_mon_sb_mb);
+	endfunction
 
-    endfunction //new()
+	//-----------------------------------------------------------------------
+	// TASK: reset
+	//
+	// DESCRIPTION:
+	//   Resets all environment components.
+	//
+	// PARAMETERS:
+	//   None
+	//-----------------------------------------------------------------------
+	task automatic reset();
+		begin
+			$display("[%0t]: ENV reset", $time);
+			m_drv.reset_interface();
+			m_ref_model.reset_n();
+		end
+	endtask
 
+	//-----------------------------------------------------------------------
+	// TASK: run
+	//
+	// DESCRIPTION:
+	//   Starts all environment components in parallel.
+	//
+	// PARAMETERS:
+	//   None
+	//-----------------------------------------------------------------------
+	task automatic run();
+		$display("[%0t]: ENV start running..", $time);
+		fork
+			m_drv.run();
+			m_ref_model.run();
+			m_sb.run();
+			m_mon.run();
+		join
+	endtask
 
-    task automatic reset();
-        begin
-            $display("[%0t]: ENV reset",$time);
-            // drv.m_bus_vif.driver_cb.req <= 0;
-            drv.reset_interface();
-            ref_model.reset_n();
-        end
-    endtask //automatic
-
-
-    task automatic run();
-            $display("[%0t]: ENV start running..",$time);
-            fork
-                drv.run();
-                ref_model.run();
-                sb.run();
-                mon.run();
-            join
-    endtask //automatic
-
-
-endclass //className
+endclass

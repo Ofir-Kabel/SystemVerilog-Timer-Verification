@@ -1,3 +1,13 @@
+//-----------------------------------------------------------------------
+// FILE: design_pkg.sv
+//
+// DESCRIPTION:
+//   Main design package that includes all verification classes.
+//
+// AUTHOR: Ofir Kabel
+// DATE: 2025-12-15
+//-----------------------------------------------------------------------
+
 `timescale 1ns/1ns
 
 import design_params_pkg::*;

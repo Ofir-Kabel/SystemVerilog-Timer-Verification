@@ -1,3 +1,14 @@
+//-----------------------------------------------------------------------
+// FILE: timer_periph.sv
+//
+// DESCRIPTION:
+//   Timer peripheral RTL module. Implements countdown timer with
+//   auto-reload capability and status register.
+//
+// AUTHOR: Ofir Kabel
+// DATE: 2025-12-15
+//-----------------------------------------------------------------------
+
 `timescale 1ns/1ps
 import design_params_pkg::*;
 

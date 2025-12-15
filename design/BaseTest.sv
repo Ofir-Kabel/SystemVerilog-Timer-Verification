@@ -1,19 +1,46 @@
+//-----------------------------------------------------------------------
+// FILE: BaseTest.sv
+//
+// DESCRIPTION:
+//   Base test class containing test scenarios and verification plan.
+//   Includes functional tests, corner cases, and random stress tests.
+//
+// AUTHOR: Ofir Kabel
+// DATE: 2025-12-15
+//-----------------------------------------------------------------------
+
 import design_params_pkg::*;
 
+//-----------------------------------------------------------------------
+// CLASS: BaseTest
+//
+// DESCRIPTION:
+//   Implements verification plan with directed tests, corner case tests,
+//   and random stimulus generation.
+//-----------------------------------------------------------------------
 class BaseTest;
 
-    Sequencer m_seq;
-    TbEnv m_env;
-    virtual bus_if.bus_if m_vif;
+	//-----------------------------------------------------------------------
+	// Properties (Class Members)
+	//-----------------------------------------------------------------------
+	local Sequencer m_seq;
+	local TbEnv m_env;
+	local virtual bus_if.bus_if m_vif;
 
-    function new(input virtual bus_if.bus_if i_vif);
-        // 1. Hook up interface
-        m_vif = i_vif;
-        // 2. Build Environment
-        m_env = new(m_vif);
-        // 3. Build Sequencer and connect to Env mailboxes
-        m_seq = new(m_env.seq_drv_mb, m_env.seq_ref_mb);
-    endfunction 
+	//-----------------------------------------------------------------------
+	// FCN: new
+	//
+	// DESCRIPTION:
+	//   Constructor for BaseTest. Creates environment and sequencer.
+	//
+	// PARAMETERS:
+	//   i_vif - (input) Virtual interface to DUT
+	//-----------------------------------------------------------------------
+	function new(input virtual bus_if.bus_if i_vif);
+		m_vif = i_vif;
+		m_env = new(m_vif);
+		m_seq = new(m_env.m_seq_drv_mb, m_env.m_seq_ref_mb);
+	endfunction
 
     // --- Global Reset Task ---
     task automatic reset();

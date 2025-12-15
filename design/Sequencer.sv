@@ -1,26 +1,63 @@
-import design_params_pkg::*; // Assuming Trans definitions are here
+//-----------------------------------------------------------------------
+// FILE: Sequencer.sv
+//
+// DESCRIPTION:
+//   Sequencer component that generates and sends transactions to driver
+//   and reference model. Includes directed and random test scenarios.
+//
+// AUTHOR: Ofir Kabel
+// DATE: 2025-12-15
+//-----------------------------------------------------------------------
 
+import design_params_pkg::*;
+
+//-----------------------------------------------------------------------
+// CLASS: Sequencer
+//
+// DESCRIPTION:
+//   Generates stimulus for verification. Provides both directed test
+//   sequences and constrained-random generation capabilities.
+//-----------------------------------------------------------------------
 class Sequencer;
 
-    mailbox #(BusTrans) seq_drv_mb, seq_ref_mb;
-    BusTrans bus_tr;
+	//-----------------------------------------------------------------------
+	// Properties (Class Members)
+	//-----------------------------------------------------------------------
+	local mailbox #(BusTrans) m_seq_drv_mb;
+	local mailbox #(BusTrans) m_seq_ref_mb;
+	local BusTrans m_bus_tr;
 
-    // --- Constructor ---
-    function new(mailbox#(BusTrans) i_seq_drv_mb, mailbox#(BusTrans) i_seq_ref_mb);
-        seq_drv_mb = i_seq_drv_mb;
-        seq_ref_mb = i_seq_ref_mb;
-    endfunction 
+	//-----------------------------------------------------------------------
+	// FCN: new
+	//
+	// DESCRIPTION:
+	//   Constructor for Sequencer class.
+	//
+	// PARAMETERS:
+	//   i_seq_drv_mb - (input) Sequencer to driver mailbox
+	//   i_seq_ref_mb - (input) Sequencer to reference model mailbox
+	//-----------------------------------------------------------------------
+	function new(mailbox#(BusTrans) i_seq_drv_mb, mailbox#(BusTrans) i_seq_ref_mb);
+		m_seq_drv_mb = i_seq_drv_mb;
+		m_seq_ref_mb = i_seq_ref_mb;
+	endfunction
 
-    // =================================================================
-    //  Helper Task: Send Transaction
-    //  Centralizes the ID increment, mailbox put, and display logic
-    // =================================================================
-    task automatic send_trans(BusTrans tr);
-        tr.ID_increment();
-        seq_drv_mb.put(tr);
-        seq_ref_mb.put(tr);
-        tr.display("SEQ");
-    endtask
+	//-----------------------------------------------------------------------
+	// TASK: send_trans
+	//
+	// DESCRIPTION:
+	//   Helper task to send transaction to driver and reference model.
+	//   Centralizes ID increment, mailbox put, and display logic.
+	//
+	// PARAMETERS:
+	//   i_tr - (input) Transaction to send
+	//-----------------------------------------------------------------------
+	task automatic send_trans(BusTrans i_tr);
+		i_tr.ID_increment();
+		m_seq_drv_mb.put(i_tr);
+		m_seq_ref_mb.put(i_tr);
+		i_tr.display("SEQ");
+	endtask
 
     // =================================================================
     //  RANDOM STIMULUS (VPlan Slide 2 & 5: Random_RW)

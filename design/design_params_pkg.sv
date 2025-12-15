@@ -1,3 +1,13 @@
+//-----------------------------------------------------------------------
+// FILE: design_params_pkg.sv
+//
+// DESCRIPTION:
+//   Package containing design parameters and constants for timer peripheral.
+//
+// AUTHOR: Ofir Kabel
+// DATE: 2025-12-15
+//-----------------------------------------------------------------------
+
 package design_params_pkg;
   parameter int P_ADDR_WIDTH = 8;
   parameter int P_DATA_WIDTH = 32;
