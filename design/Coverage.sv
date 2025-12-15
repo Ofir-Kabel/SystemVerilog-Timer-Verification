@@ -1,51 +1,69 @@
+import design_params_pkg::*;
 
+class Coverage;
 
-class Coverage; 
-    BusTrans tr;
+  BusTrans tr;
 
-    covergroup trans_cg;
-    kind_cp: coverpoint tr.m_kind{
-        bins write = {WRITE};
-        bins read  = {READ};
+  // --- Covergroup Definition ---
+  covergroup trans_cg;
+    option.per_instance = 1;  // מאפשר לראות כיסוי פר מופע ב-GUI
+    option.comment = "Bus Transaction Coverage";
+
+    // 1. Operation Kind (READ / WRITE)
+    kind_cp: coverpoint tr.m_kind {
+      bins write = {WRITE}; bins read = {READ};
     }
-    addr_cp: coverpoint tr.m_addr{
-        bins control_addr = {P_ADDR_CONTROL};
-        bins load_addr = {P_ADDR_LOAD};
-        bins status_addr = {P_ADDR_STATUS};
-        bins out_range_addr = {[0:63]}; //else
-    }
-    data_cp: coverpoint tr.m_data{
-        bins in_range =  {[0:32'h0000_FFFF]};
-        bins out_range = {[32'h0001_000:32'hFFFF_FFFF]};
-    }    
 
-    write_en_cp: coverpoint tr.m_write_en;
-    kind_addr_cross: cross kind_cp , addr_cp;
-    kind_data_cross: cross kind_cp , data_cp;
-    addr_data_cross: cross addr_cp , data_cp;
+    // 2. Address Coverage
+    addr_cp: coverpoint tr.m_addr {
+      bins control_addr = {P_ADDR_CONTROL};
+      bins load_addr = {P_ADDR_LOAD};
+      bins status_addr = {P_ADDR_STATUS};
+      // כיסוי לכתובות חוקיות אחרות בטווח, אך לא הכתובות המיוחדות
+      bins other_valid  = {[0:63]} with (!(item inside {P_ADDR_CONTROL, P_ADDR_LOAD, P_ADDR_STATUS}));
+      bins out_of_range = {[64 : $]};  // כל מה שמעבר לטווח הזיכרון
+    }
 
-    reload_en_cp: coverpoint (tr.m_addr == P_ADDR_CONTROL ? tr.m_data[1] : 0) {
-        bins en = {1};   // Fixed: Use set {1}
-        bins dis = {0};  // Fixed: Use set {0}
+    // 3. Data Values Coverage (Low / High ranges)
+    data_cp: coverpoint tr.m_data {
+      bins low_range = {[0 : 32'h0000_FFFF]}; bins high_range = {[32'h0001_0000 : 32'hFFFF_FFFF]};
     }
-    expired_cp: coverpoint (tr.m_addr == P_ADDR_STATUS ? tr.m_data[0] : 0) {
-        bins set = {1};    // Fixed: Use set {1}
-        bins clear = {0};  // Fixed: Use set {0}
+
+    // 4. Reload Enable (Bit 1 in Control Register)
+    // שים לב לשימוש ב-iff: נדגום רק אם הכתובת היא CONTROL והפעולה היא כתיבה
+    reload_en_cp: coverpoint tr.m_data[1] iff (tr.m_addr == P_ADDR_CONTROL && tr.m_kind == WRITE) {
+      bins enabled = {1}; bins disabled = {0};
     }
+
+    // 5. Expired Flag (Bit 0 in Status Register)
+    // נדגום רק בקריאה מהסטטוס (כי אז אנחנו רואים אם הדגל דלוק או כבוי)
+    expired_cp: coverpoint tr.m_data[0] iff (tr.m_addr == P_ADDR_STATUS && tr.m_kind == READ) {
+      bins flag_set = {1}; bins flag_clear = {0};
+    }
+
+    // --- Cross Coverage ---
+
+    // האם ביצענו קריאה וכתיבה לכל הכתובות החשוובות?
+    kind_addr_cross: cross kind_cp, addr_cp{
+      // מתעלמים מכתובות מחוץ לטווח בקרוס הזה
+      ignore_bins ignore_invalid = binsof (addr_cp.out_of_range);
+    }
+
+    // האם בדקנו מצבי RELOAD (דלוק/כבוי) גם בכתיבה רגילה?
+    // (מוודא ששילבנו סוגי טרנזקציות עם מצבי Reload)
     cross_kind_reload: cross kind_cp, reload_en_cp;
 
-    endgroup
-    
+  endgroup
 
-    //constructor
-    function new();
-        trans_cg = new();
-    endfunction //new()
+  // --- Constructor ---
+  function new();
+    trans_cg = new();
+  endfunction
 
-    //sampling method
-    function void sample(input BusTrans i_tr);
-        this.tr = i_tr;
-        trans_cg.sample();
-    endfunction //sample()
+  // --- Sampling Method ---
+  function void sample (input BusTrans i_tr);
+    this.tr = i_tr;  // מעדכנים את המשתנה המקומי
+    trans_cg.sample();  // דוגמים
+  endfunction
 
-endclass //Coverage
+endclass  // Coverage

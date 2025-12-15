@@ -26,6 +26,7 @@ class Monitor;
           // Create actual transaction based on the type of operation
           if (bus_vif.monitor_cb.write_en) begin
             WriteTrans actual_write_tr = new();
+            actual_write_tr.m_write_en = 1;
             actual_write_tr.m_addr = bus_vif.monitor_cb.addr;
             actual_write_tr.m_data = bus_vif.monitor_cb.wdata;
             actual_write_tr.m_unique_id = intended_tr.m_unique_id; // assign the intended ID to the actual transaction
@@ -37,6 +38,7 @@ class Monitor;
             //          bus_vif.monitor_cb.wdata);
           end else begin
             ReadTrans actual_read_tr = new();
+            actual_read_tr.m_write_en = 0;
             actual_read_tr.m_addr = bus_vif.monitor_cb.addr;
             actual_read_tr.m_data = bus_vif.monitor_cb.rdata;
             actual_read_tr.m_unique_id = intended_tr.m_unique_id; // assign the intended ID to the actual transaction

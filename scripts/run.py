@@ -2,12 +2,12 @@ import os
 import sys
 import argparse
 import shutil
-from pathlib import Path
+import subprocess
 
-# שינוי התיקייה הנוכחית ל-scripts
+# Change current directory to scripts
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-# --- פונקציה להרצת פקודות shell עם בדיקת הצלחה ---
+# --- Function to run shell commands with error checking ---
 def run_command(command, step_name):
     print(f"\n--- INFO: Starting Step: {step_name} ---")
     print(f"Executing: {command}")
@@ -16,7 +16,7 @@ def run_command(command, step_name):
         print(f"\n--- ERROR: Step '{step_name}' failed! ---")
         sys.exit(1)
 
-# --- פונקציה לסריקה ובחירת טסט ---
+# --- Function to choose testbench ---
 def choose_testbench(verification_path):
     tb_files = [f[:-3] for f in os.listdir(verification_path)
                 if f.startswith("tb_") and f.endswith(".sv")]
@@ -39,6 +39,38 @@ def choose_testbench(verification_path):
         except ValueError:
             print("Please enter a number.")
 
+# --- Helper to parse coverage score from text file ---
+# --- Helper to parse coverage score from text file ---
+def print_coverage_summary(report_path):
+    try:
+        if not os.path.exists(report_path):
+            return
+        
+        with open(report_path, 'r', encoding='utf-8', errors='ignore') as f: # Added safe encoding
+            content = f.read()
+            import re
+            
+            # 1. ננסה לתפוס את השורה המסכמת בסוף הקובץ
+            # מחפש: "Total Coverage By Instance ... : 89.28%"
+            match = re.search(r'Total Coverage By Instance.*:\s+(\d+\.?\d*)%', content)
+            
+            # 2. גיבוי: אם לא מוצא, ננסה לתפוס את ה-TOTAL COVERGROUP
+            if not match:
+                match = re.search(r'TOTAL COVERGROUP COVERAGE:\s+(\d+\.?\d*)%', content)
+
+            if match:
+                score = match.group(1)
+                
+                # הדפסה יפה ומודגשת לטרמינל
+                print("\n" + "="*50)
+                print(f"   📊 FINAL COVERAGE SCORE: {score}%")
+                print("="*50 + "\n")
+            else:
+                print("\n[INFO] Could not find coverage percentage in report.")
+
+    except Exception as e:
+        print(f"[WARNING] Failed to parse coverage score: {e}")
+
 # --- Main script execution ---
 try:
     ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -48,21 +80,21 @@ try:
     SCRIPTS = os.path.join(ROOT_DIR, "scripts")
     CURRENT_TEST_FILE = os.path.join(SIM_LAB, ".current_test")
 
-    # --- בדיקת רישוי ---
+    # --- License Check ---
     salt_server = os.environ.get("SALT_LICENSE_SERVER")
     if salt_server:
         print(f"SALT_LICENSE_SERVER = {salt_server}")
     else:
         print("\n--- WARNING: SALT_LICENSE_SERVER is not set! ---")
 
-    # --- פרסינג ארגומנטים ---
+    # --- Argument Parsing ---
     parser = argparse.ArgumentParser(description="Run QuestaSim simulation")
     parser.add_argument('--gui', action='store_true', help="Run simulation in GUI mode.")
     parser.add_argument('--seed', type=int, default=1, help="Random seed.")
     parser.add_argument('--test', type=str, help="Testbench name (tb_xxx).")
     args = parser.parse_args()
 
-    # --- בחירת טסט ---
+    # --- Test Selection ---
     if not args.test:
         if os.path.exists(CURRENT_TEST_FILE):
             with open(CURRENT_TEST_FILE, "r") as f:
@@ -76,18 +108,21 @@ try:
         else:
             args.test = choose_testbench(VERIFICATION_LAB)
 
-    # --- שמירת הבחירה לקובץ ---
+    # --- Save Selection ---
     with open(CURRENT_TEST_FILE, "w") as f:
         f.write(args.test.strip())
 
     print(f"\n--- INFO: Selected Testbench: {args.test} ---")
 
-    # --- ניקוי קבצים קודמים ---
+    # --- Cleanup ---
     print("\n--- INFO: Cleaning previous run ---")
     cleanup_dirs = [os.path.join(SIM_LAB, "work"),
                     os.path.join(SIM_LAB, "design_work")]
     cleanup_files = [os.path.join(SIM_LAB, f"{args.test}.log"),
-                     os.path.join(SIM_LAB, f"{args.test}.wlf")]
+                     os.path.join(SIM_LAB, f"{args.test}.wlf"),
+                     os.path.join(SIM_LAB, f"{args.test}.ucdb"),
+                     os.path.join(SIM_LAB, "coverage_report.txt"),
+                     os.path.join(SIM_LAB, "summary_report.txt")]
 
     for d in cleanup_dirs:
         if os.path.exists(d):
@@ -99,54 +134,80 @@ try:
             print(f"Deleting file: {f}")
             os.remove(f)
 
-    # --- קומפילציה ---
+    # --- Compile ---
     CMD_COMPILE = f'vsim -c -do "{os.path.join(SCRIPTS, "compile.do")}"'
     run_command(CMD_COMPILE, "Compile")
 
-    # --- אילבורציה ---
+    # --- Elaborate ---
     CMD_ELABORATE = f'vsim -c -do "{os.path.join(SCRIPTS, "elaborate.do")}"'
     run_command(CMD_ELABORATE, "Elaborate")
 
-    # --- סימולציה (הקטע המתוקן) ---
+    # --- Simulate ---
     log_file = os.path.join(SIM_LAB, f"{args.test}.log")
     wlf_file = os.path.join(SIM_LAB, f"{args.test}.wlf")
     ucdb_file = os.path.join(SIM_LAB, f"{args.test}.ucdb")
     top_module = args.test + "_opt"
 
-    # *** התיקון הקריטי: יצירת משתנה חדש עם נתיבים בפורמט Tcl/Linux ***
-    # זה פותר את בעיית ה-'\t' ב-Windows.
+    # Fix paths for TCL (Windows backslash issue)
     tcl_ucdb_file = ucdb_file.replace(os.sep, '/') 
 
-    # --- תוספת: הגדרת נתיב לקובץ הגדרות הגלים ---
+    # Wave format handling
     WAVE_FORMAT_DO = os.path.join(SCRIPTS, "wave_format.do")
     tcl_wave_format_do = WAVE_FORMAT_DO.replace(os.sep, '/')
     
     cmd = f'vsim {top_module} -coverage -voptargs=+acc -sv_seed {args.seed} -L design_work '
     
-    # --- הגדרת פקודות TCL משותפות (Run ו-Coverage) ---
-    tcl_commands_base = f'run -all; coverage save {tcl_ucdb_file};'
-
+    # Common TCL commands (Run and Save Coverage)
+    tcl_commands_base = f'coverage save -onexit {tcl_ucdb_file}; run -all;'
 
     if args.gui:
-        # --- לוגיקה לטעינת גלים מותנית ---
+        # GUI Mode Logic
         if os.path.exists(WAVE_FORMAT_DO):
-            # אם הקובץ קיים, טוענים אותו.
             tcl_wave_command = f'do {tcl_wave_format_do};'
             print(f"INFO: Loading custom wave format from {WAVE_FORMAT_DO}")
         else:
-            # אם חסר, מוסיפים גלים באופן גנרי ומדפיסים אזהרה
             tcl_wave_command = f'add wave -r /*;'
             print(f"WARNING: Wave format file not found at {WAVE_FORMAT_DO}. Adding all waves generically.")
 
-        # בנית הפקודה המלאה למצב GUI
         tcl_full_command = tcl_wave_command + tcl_commands_base
         cmd += f'-gui -do "{tcl_full_command}"'
         
+        # Run Simulation (GUI)
+        run_command(cmd, "Simulate (GUI)")
+        
     else:
-        # מצב Non-GUI נשאר ללא שינוי (רק מוסיפים quit -f)
+        # Non-GUI Mode Logic
         cmd += f'-c -logfile {log_file} -wlf {wlf_file} -do "{tcl_commands_base} quit -f"'
+        
+        # Run Simulation (Batch)
+        run_command(cmd, "Simulate (Batch)")
 
-    run_command(cmd, "Simulate")
+        # --- POST SIMULATION ANALYSIS (Only for Batch Mode) ---
+        
+        # 1. Generate Coverage Report
+        print("\n--- INFO: Generating Coverage Report... ---")
+        cov_report_file = os.path.join(SIM_LAB, "coverage_report.txt")
+        # Use -output instead of -file (deprecated)
+        cov_cmd = f"vcover report -details -cvg -output {cov_report_file} {ucdb_file}"
+        
+        # Run vcover
+        subprocess.run(cov_cmd, shell=True)
+        
+        if os.path.exists(cov_report_file):
+            print(f"Coverage report saved to: {cov_report_file}")
+            print_coverage_summary(cov_report_file)
+        else:
+            print("Warning: Failed to generate coverage report file.")
+
+        # 2. Analyze Logs (Success/Fail/Mismatch)
+        print("\n--- INFO: Analyzing Log Results... ---")
+        analyze_script = os.path.join(SCRIPTS, "analyze_results.py")
+        
+        if os.path.exists(analyze_script):
+            # Run the python analysis script safely
+            subprocess.run([sys.executable, analyze_script, log_file])
+        else:
+            print(f"ERROR: Could not find analysis script at {analyze_script}")
 
     print(f"\n--- INFO: All steps completed successfully. Check {log_file} for results. ---")
 

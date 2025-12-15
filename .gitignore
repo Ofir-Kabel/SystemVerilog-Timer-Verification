@@ -1,0 +1,64 @@
+# --- Vivado & FPGA Tools ---
+*.jou
+*.log
+*.pb
+*.wdb
+*.wlf
+*.str
+*.lpr
+*.os
+*.history
+*.backup
+
+# Vivado Project directories (if you want to keep only sources)
+.Xil/
+project_*/
+xsim.dir/
+
+# --- QuestaSim / ModelSim ---
+work/
+transcript
+covhtmlreport/
+cover_report/
+*.ucdb
+*.wlf
+modelsim.ini
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# --- SystemVerilog / Verification output ---
+sim/*.log
+sim/*.wlf
+sim/*.ucdb
+sim/coverage_report/
+output/
+
+# --- IDEs & OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Temporary Files ---
+*.tmp
+*.bak
+
+# --- Specific Simulation Directories (Block everything inside) ---
+sim/work/
+sim/design_work/
+sim/tb_top_timer_opt/
+
+# --- File Extensions (Catch them anywhere) ---
+*.qdb
+*.qpg
+*.qtl
+*.ucdb
+*_info

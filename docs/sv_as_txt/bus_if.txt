@@ -7,95 +7,94 @@ interface bus_if(
     input logic rst_n
 );
 
-//interface signals
-logic req;
-logic gnt;
-logic [P_ADDR_WIDTH-1:0] addr;
-logic [P_DATA_WIDTH-1:0] wdata;
-logic [P_DATA_WIDTH-1:0] rdata;
-logic write_en;
+    // --- Interface Signals ---
+    logic req;
+    logic gnt;
+    logic [P_ADDR_WIDTH-1:0] addr;
+    logic [P_DATA_WIDTH-1:0] wdata;
+    logic [P_DATA_WIDTH-1:0] rdata;
+    logic write_en;
 
-//TB cklocking blocks
-clocking driver_cb @(posedge clk);
-    default input #1step output #2ns;
-    input gnt;
-    output req;
-    output addr;
-    output wdata;
-    input rdata;
-    output write_en;
-endclocking
+    // --- Clocking Blocks ---
+    
+    // For Driver (Outputs driven, Inputs sampled)
+    clocking driver_cb @(posedge clk);
+        default input #1step output #2ns;
+        input  gnt;
+        output req;
+        output addr;
+        output wdata;
+        input  rdata;
+        output write_en;
+    endclocking
 
-clocking monitor_cb @(posedge clk);
-    default input #1step output #2ns;
-    input gnt;
-    input req;
-    input addr;
-    input wdata;
-    input rdata;
-    input write_en;
-endclocking
+    // For Monitor (Passive sampling)
+    clocking monitor_cb @(posedge clk);
+        default input #1step output #2ns;
+        input gnt;
+        input req;
+        input addr;
+        input wdata;
+        input rdata;
+        input write_en;
+    endclocking
 
-//modports
-modport driver_md(clocking driver_cb);
-modport monitor_md(clocking monitor_cb);
-//modport sva_md(clocking monitor_cb);
+    // --- Modports ---
+    modport driver_md (clocking driver_cb);
+    modport monitor_md(clocking monitor_cb);
+    
+    modport slave_md(
+        input  req, addr, wdata, write_en,
+        output gnt, rdata
+    );
 
-modport slave_md(
-input req,addr,wdata,write_en,
-output gnt,rdata
-);
+    // =========================================================
+    // SVA - ASSERTIONS & PROPERTIES
+    // =========================================================
+    
+    // הגדרה גלובלית: כל האסרשנים מבוטלים בזמן Reset
+    default disable iff (!rst_n);
 
-//SVA interface 
+    // ------------------------------------------
+    // 1. Liveness: Response Time
+    // ה-GNT חייב להגיע תוך 3 מחזורים מרגע ה-REQ
+    // ------------------------------------------
+    property req_before_gnt_p;
+        @(posedge clk) req |-> ##[0:3] gnt;
+    endproperty
 
-//STRAT OF TRANSACTION
-//END OF TRANSACTION 
-//NEW TRANSACTION AFTER ENDING PREVIOUS TRANSACTION
+    ASSERT_REQ_TIMEOUT: assert property(req_before_gnt_p)
+        else $error("[SVA] Timeout: GNT did not assert within 3 cycles of REQ!");
 
-//gnt should be asserted within 3 cycles after req is asserted
-property req_before_gnt_p;    
-    @(posedge clk) disable iff(!rst_n)
-    req |-> ##[0:3] gnt;
-endproperty
+    // ------------------------------------------
+    // 2. Handshake Completion
+    // כאשר יש REQ וגם GNT (סיום טרנזקציה), במחזור הבא שניהם צריכים לרדת
+    // ------------------------------------------
+    property req_gnt_drops_p;
+        @(posedge clk) (req && gnt) |=> (!req && !gnt);
+    endproperty
 
-IF_req_gnt_ack: assert property(req_before_gnt_p)
-    else $error("[IF] GNT dont rise within 3 cycles after REQ");
+    ASSERT_HANDSHAKE_DROP: assert property(req_gnt_drops_p)
+        else $error("[SVA] Protocol Violation: REQ and GNT did not drop simultaneously after handshake.");
 
-//req and gnt should drop in sequence
-property req_gnt_drops_p;
-    @(posedge clk) disable iff(!rst_n) 
-        (req && gnt) |=> !req && !gnt;
-endproperty
-IF_req_gnt_drops: assert property(req_gnt_drops_p)
-    else $error("[IF] Handshake violation: REQ and GNT did not drop in simultaniously.");
+    // ------------------------------------------
+    // 3. Stability (Critical!)
+    // ברגע שהמאסטר הרים REQ, המידע (Addr, Data, Control) חייב להישאר יציב
+    // עד שהוא מקבל GNT. אסור לשנות דעה באמצע!
+    // ------------------------------------------
+    property master_data_stability_p;
+        @(posedge clk) (req && !gnt) |=> 
+            ($stable(addr) && $stable(wdata) && $stable(write_en));
+    endproperty
 
-//req cannot go high before gnt is lows
-property req_low_p;
-    @(posedge clk) disable iff(!rst_n) 
-        gnt |-> !req;
-endproperty
-IF_req_low: assert property(req_low_p)
-    else $error("[IF] Protocol violation: REQ deasserted immediately when GNT was asserted.");
+    ASSERT_MASTER_STABILITY: assert property(master_data_stability_p)
+        else $error("[SVA] Stability Violation: Address/Data changed while waiting for GNT.");
 
-//data stability during active handshake
-property master_data_stability_p;
-    @(posedge clk) disable iff(!rst_n)
-        (req && gnt) |-> ##1 (
-            $past(addr) == addr &&
-            $past(wdata) == wdata &&
-            $past(write_en) == write_en
-        );
-endproperty
-IF_master_stability: assert property(master_data_stability_p)
-    else $error("[IF] Master protocol violation: Address or data changed during active handshake.");
+    // ------------------------------------------
+    // 4. Unknown Checks (X/Z)
+    // מוודא שאין ערכים לא חוקיים על קווי הבקרה הקריטיים
+    // ------------------------------------------
+    ASSERT_NO_X_ON_GNT: assert property (@(posedge clk) !$isunknown(gnt))
+        else $error("[SVA] Error: GNT signal is X or Z!");
 
-
-endinterface //bus_if
-
-
-
-
-
-
-
-
+endinterface // bus_if

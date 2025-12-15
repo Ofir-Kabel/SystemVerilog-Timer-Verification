@@ -1,3 +1,4 @@
+import design_params_pkg::*;
 
 class BaseTest;
 
@@ -6,96 +7,193 @@ class BaseTest;
     virtual bus_if.bus_if m_vif;
 
     function new(input virtual bus_if.bus_if i_vif);
-        
-        //creating the interface and environment
+        // 1. Hook up interface
         m_vif = i_vif;
+        // 2. Build Environment
         m_env = new(m_vif);
-        //after creating the env we can access its mailboxes to connect to the sequencer
+        // 3. Build Sequencer and connect to Env mailboxes
         m_seq = new(m_env.seq_drv_mb, m_env.seq_ref_mb);
-    endfunction //new()
+    endfunction 
 
+    // --- Global Reset Task ---
     task automatic reset();
-        begin
-            m_env.reset();
-        end
-    endtask //automatic
+        $display("\n[%0t] [TEST] Applying Global Reset...", $time);
+        m_env.reset(); 
+    endtask 
 
+    // =================================================================
+    //  TEST SCENARIOS (From VPlan Slide 5)
+    // =================================================================
+
+    // -----------------------------------------------------------------
+    // Test1: Basic Functional Countdown
+    // Purpose: Load 7, start, wait for expire, check status.
+    // -----------------------------------------------------------------
     task automatic Test1();
-        begin
-            m_seq.loading(32'h00000007);
-            #50;
-            m_seq.start_count_i_reload($urandom_range(0,1));
-            #50;
-            m_seq.checking_status();
-            #50;
-            m_seq.checking_status();
-            #100;
-            m_seq.status_reset();
-        end
-    endtask //automatic
+        $display("\n=== STARTING TEST 1: Basic Countdown (One-Shot) ===");
+        m_seq.status_reset(); // Ensure safe start
+        
+        m_seq.loading(32'h00000007);
+        #50;
+        m_seq.start_count_i_reload(0); // 0 = One-shot
+        
+        // Wait for countdown (approx 7 * 10ns)
+        #150; 
+        
+        m_seq.checking_status(); // Should read 1 (Expired) and clear it
+        #50;
+        m_seq.checking_status(); // Should read 0 (Already cleared)
+        
+        m_seq.status_reset();
+    endtask 
 
+    // -----------------------------------------------------------------
+    // Test2: Specific Register Access
+    // Purpose: Verify specific R/W to registers.
+    // -----------------------------------------------------------------
     task automatic Test2();
-        begin
-            m_seq.specific_write(16'h0004, 32'h0000000F); 
-            #300;
-            m_seq.specific_read(16'h0004);
-            #200;
-            m_seq.specific_write(16'h0001, 32'h00000003); 
-            #500;
-            m_seq.specific_read(16'h0008);
-            #200;
-            m_seq.specific_read(16'h0008);
-            #200;
-        end
+        $display("\n=== STARTING TEST 2: Specific Register Access ===");
+        
+        // Write/Read LOAD register
+        m_seq.specific_write(32'h04, 32'h0000000F); 
+        #100;
+        m_seq.specific_read(32'h04);
+        
+        // Write/Read CONTROL register
+        #100;
+        m_seq.specific_write(32'h00, 32'h00000003); 
+        #100;
+        // Read Status (Check if timer started)
+        m_seq.specific_read(32'h08);
+        #100;
     endtask
             
+    // -----------------------------------------------------------------
+    // Test3: Complex Sequences & Reset
+    // Purpose: Multiple loads, reloading, and hardware reset check.
+    // -----------------------------------------------------------------
     task automatic Test3();
-        begin
-            m_seq.loading(32'h00000007);
-            #50;
-            m_seq.start_count_i_reload($urandom_range(0,1));
-            #50;
-            reset();
-            #10;
-            m_seq.checking_status();
-            m_seq.loading(32'h0000000A);
-            #50;
-            m_seq.start_count_i_reload($urandom_range(0,1));
-            #20;
-            m_seq.loading(32'h00000003);
-            #50;
-            m_seq.start_count_i_reload($urandom_range(0,1));
-            #50;
-            m_seq.checking_status();
-            #100;
-            m_seq.status_reset();
-        end
-    endtask //automatic
-
-
-//----------------------------------------
-//
-//              MAIN TEST
-//
-//----------------------------------------
-task automatic test_run();
-
-    this.reset();
-    fork
-        // Process 1: Start the environment components (Driver, Monitor, Scoreboard)
-        m_env.run(); 
+        $display("\n=== STARTING TEST 3: Complex Sequences & Reset ===");
         
+        // Start a cycle
+        m_seq.loading(32'h00000005);
+        m_seq.start_count_i_reload(1); // Auto-reload
+        #200;
+        
+        // Assert Hardware Reset in middle of operation
+        $display("[%0t] [TEST] Asserting Hardware Reset!", $time);
+        reset(); 
+        #50;
+        
+        // Check if registers cleared
+        m_seq.checking_status(); 
+        
+        // Resume operation
+        m_seq.loading(32'h0000000A);
+        m_seq.start_count_i_reload(1);
+        #300;
+        
+        // Change load value while running (Edge case)
+        m_seq.loading(32'h00000003);
+        #200;
+        
+        m_seq.status_reset();
+    endtask 
+
+    // -----------------------------------------------------------------
+    // Load_Zero (Planned Test)
+    // Purpose: Corner Case R4 - Loading 0 should behave as 1 cycle.
+    // -----------------------------------------------------------------
+    task automatic Load_Zero_Test();
+        $display("\n=== STARTING TEST: Load Zero Corner Case ===");
+        m_seq.status_reset();
+        
+        m_seq.loading(32'h0); // Load 0
+        m_seq.start_count_i_reload(0); // One-shot
+        
+        // Should expire almost immediately (1 cycle)
+        #50; 
+        m_seq.checking_status();
+        
+        m_seq.status_reset();
+    endtask
+
+    // -----------------------------------------------------------------
+    // Start_Mid_Count (Planned Test)
+    // Purpose: Restarting timer while it is already running.
+    // -----------------------------------------------------------------
+    task automatic Start_Mid_Count_Test();
+        $display("\n=== STARTING TEST: Start Mid-Count Restart ===");
+        m_seq.status_reset();
+        
+        // 1. Start a long timer (20 cycles)
+        m_seq.loading(32'd20);
+        m_seq.start_count_i_reload(0);
+        
+        #50; // Let it run a bit
+        
+        // 2. Restart immediately with short timer (3 cycles)
+        $display("[%0t] [TEST] Restarting with new value mid-count...", $time);
+        m_seq.loading(32'd3);
+        m_seq.start_count_i_reload(0);
+        
+        #60; // Wait for short timer to finish
+        m_seq.checking_status(); // Should be expired
+        
+        m_seq.status_reset();
+    endtask
+
+    // -----------------------------------------------------------------
+    // Random_RW (Planned Test)
+    // Purpose: Constrained-Random coverage closure.
+    // -----------------------------------------------------------------
+    task automatic Random_RW_Test();
+        $display("\n=== STARTING TEST: Random Read/Write Stress ===");
+        m_seq.rand_read_write(50); // Run 50 random transactions
+    endtask
+
+
+    // =================================================================
+    //  MAIN RUN TASK
+    // =================================================================
+    task automatic test_run();
+        // 1. Initial Reset
+        this.reset();
+        
+        // 2. Start Environment Components (Non-blocking)
+        fork
+            m_env.run();
+        join_none
+        
+        // 3. Execute Test Plan Sequentially (Blocking)
         begin 
-            $display("\n-------STARTING_TEST_1---------\n");
+            // Phase 1: Directed Functional Tests
             Test1();
-            #1000;
-            $display("\n-------STARTING_TEST_2---------\n");
+            #500;
             Test2();
+            #500;
+            Test3();
+            #500;
+            
+            // Phase 2: Corner Cases
+            Load_Zero_Test();
+            #500;
+            Start_Mid_Count_Test();
+            #500;
+            
+            // Phase 3: Random Stress
+            Random_RW_Test();
+            #500;
+
+            // Phase 4: Coverage Closure (NEW)
+            $display("\n=== STARTING TEST: Coverage Closure ===");
+            m_seq.coverage_closure_test();
+            #500;
         end 
             
-    join_none 
-    #1000ns; 
-    $finish;
-endtask //test_run()
+        #1000ns;
+        $display("\n[TEST] All tests completed. Finishing simulation.");
+        $finish;
+    endtask 
 
-endclass //BaseTest
+endclass

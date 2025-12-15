@@ -1,198 +1,159 @@
+import design_params_pkg::*; // Assuming Trans definitions are here
+
 class Sequencer;
 
-  mailbox #(BusTrans) seq_drv_mb, seq_ref_mb;
-  BusTrans bus_tr;
+    mailbox #(BusTrans) seq_drv_mb, seq_ref_mb;
+    BusTrans bus_tr;
 
-  //constructor
-  function new(mailbox#(BusTrans) i_seq_drv_mb, mailbox#(BusTrans) i_seq_ref_mb);
-    seq_drv_mb = i_seq_drv_mb;
-    seq_ref_mb = i_seq_ref_mb;
-  endfunction  //new()
+    // --- Constructor ---
+    function new(mailbox#(BusTrans) i_seq_drv_mb, mailbox#(BusTrans) i_seq_ref_mb);
+        seq_drv_mb = i_seq_drv_mb;
+        seq_ref_mb = i_seq_ref_mb;
+    endfunction 
 
-  task automatic rand_read_write(input int num_transactions);
-    $display("[%0t] Sequencer: Rand RD/WR start for %0d transactions\n", $time, num_transactions);
-    repeat (num_transactions) begin
-      if ($urandom_range(0, 1)) begin
+    // =================================================================
+    //  Helper Task: Send Transaction
+    //  Centralizes the ID increment, mailbox put, and display logic
+    // =================================================================
+    task automatic send_trans(BusTrans tr);
+        tr.ID_increment();
+        seq_drv_mb.put(tr);
+        seq_ref_mb.put(tr);
+        tr.display("SEQ");
+    endtask
+
+    // =================================================================
+    //  RANDOM STIMULUS (VPlan Slide 2 & 5: Random_RW)
+    // =================================================================
+    
+    // Generates mixed Read and Write transactions based on constraints
+    task automatic rand_read_write(input int num_transactions);
+        $display("\n[%0t]: [SEQ] START: Random Read/Write (%0d transactions)", $time, num_transactions);
+        
+        repeat (num_transactions) begin
+            // Randomly choose Read (0) or Write (1)
+            if ($urandom_range(0, 1)) begin
+                automatic WriteTrans new_write_trans = new();
+                if (!new_write_trans.randomize()) 
+                    $error("[%0t]: [SEQ] Error: Randomization failed for WriteTrans", $time);
+                new_write_trans.m_write_en = (new_write_trans.m_kind == WRITE) ? 1 : 0; // Sync
+                send_trans(new_write_trans);
+            end else begin
+                automatic ReadTrans new_read_trans = new();
+                if (!new_read_trans.randomize()) 
+                    $error("[%0t]: [SEQ] Error: Randomization failed for ReadTrans", $time);
+                new_read_trans.m_write_en = (new_read_trans.m_kind == WRITE) ? 1 : 0; // Sync
+                send_trans(new_read_trans);
+            end
+        end
+    endtask 
+
+    // =================================================================
+    //  DIRECTED TASKS (VPlan Slide 5: Test Support)
+    // =================================================================
+
+    // --- Loading the Timer (Address 0x04) ---
+    // Supports VPlan R4: Writing 0 to LOAD_VAL
+    task automatic loading(input [P_DATA_WIDTH-1:0] i_load_data);
         automatic WriteTrans new_write_trans = new();
-        assert (new_write_trans.randomize())
-        else $error("[%0t] Sequencer Error: randomization failed in write_trans\n", $time);
-        bus_tr = new_write_trans;
-      end else begin
+        $display("[%0t]: [SEQ] Loading Timer with value: 0x%0h", $time, i_load_data);
+        
+        new_write_trans.m_addr = 32'h04; // LOAD register
+        new_write_trans.m_data = i_load_data;
+        new_write_trans.m_write_en = 1'b1;
+        
+        send_trans(new_write_trans);
+    endtask 
+
+    // --- Start Countdown / Reload Config (Address 0x00) ---
+    // i_reload_en: 0 = One-Shot, 1 = Auto-Reload
+    task automatic start_count_i_reload(input bit i_reload_en);
+        automatic WriteTrans new_write_trans = new();
+        
+        new_write_trans.m_addr = 32'h00; // CONTROL register
+        new_write_trans.m_write_en = 1'b1;
+
+        if (i_reload_en) begin
+            $display("[%0t]: [SEQ] Start Countdown: Auto-Reload Mode (ENABLE=1, RELOAD=1)", $time);
+            new_write_trans.m_data = 32'h00000003; // Bits [1:0] = 11
+        end else begin
+            $display("[%0t]: [SEQ] Start Countdown: One-Shot Mode (ENABLE=1, RELOAD=0)", $time);
+            new_write_trans.m_data = 32'h00000001; // Bits [1:0] = 01
+        end
+        
+        send_trans(new_write_trans);
+    endtask 
+
+    // --- Check Status (Address 0x08) ---
+    // VPlan R5: Reading STATUS should clear the EXPIRED flag
+    task automatic checking_status();
         automatic ReadTrans new_read_trans = new();
-        assert (new_read_trans.randomize())
-        else $error("[%0t] Sequencer Error: randomization failed in read_trans\n", $time);
-        bus_tr = new_read_trans;
-      end
-      bus_tr.ID_increment();
-      seq_drv_mb.put(bus_tr);
-      seq_ref_mb.put(bus_tr);
-      bus_tr.display("SEQ");
-    end
-  endtask  //automatic
+        $display("[%0t]: [SEQ] Reading STATUS register (Expect Read-to-Clear)", $time);
+        
+        new_read_trans.m_addr = 32'h08; // STATUS register
+        new_read_trans.m_write_en = 1'b0;
+        
+        send_trans(new_read_trans);
+    endtask 
 
-  task automatic rand_read(input int num_transactions);
-    $display("[%0t] Sequencer: Rand RD start for %0d transactions\n", $time, num_transactions);
-    repeat (num_transactions) begin
-      automatic ReadTrans new_read_trans = new();
-      assert (new_read_trans.randomize())
-      else $error("[%0t] Sequencer Error: randomization failed in read_trans\n", $time);
-      bus_tr = new_read_trans;
-      bus_tr.ID_increment();
-      seq_drv_mb.put(bus_tr);
-      seq_ref_mb.put(bus_tr);
-      bus_tr.display("SEQ");
-    end
-  endtask  //automatic
+    // --- Specific Write (Generic) ---
+    // Used in Test2
+    task automatic specific_write(input [P_ADDR_WIDTH-1:0] i_addr, input [P_DATA_WIDTH-1:0] i_data);
+        automatic WriteTrans new_write_trans = new();
+        $display("[%0t]: [SEQ] Specific Write: Addr=0x%h, Data=0x%h", $time, i_addr, i_data);
+        
+        new_write_trans.m_addr = i_addr;
+        new_write_trans.m_data = i_data;
+        new_write_trans.m_write_en = 1'b1;
+        
+        send_trans(new_write_trans);
+    endtask 
 
-  task automatic write_than_read(input [P_ADDR_WIDTH-1:0] i_addr, input [P_DATA_WIDTH-1:0] i_data);
-    begin
-      automatic WriteTrans new_write_trans = new();
-      automatic ReadTrans  new_read_trans = new();
-      $display("[%0t]: Sequencer Write than Read transactions", $time);
-      new_write_trans.m_data = i_data;
-      new_write_trans.m_addr = i_addr;
-      new_write_trans.m_write_en = 1'b1;
-      bus_tr = new_write_trans;
-      bus_tr.ID_increment();
-      seq_drv_mb.put(bus_tr);
-      seq_ref_mb.put(bus_tr);
-      bus_tr.display("SEQ");
-      new_read_trans.m_addr = i_addr;
-      new_read_trans.m_write_en = 1'b0;
-      bus_tr = new_read_trans;
-      bus_tr.ID_increment();
-      seq_drv_mb.put(bus_tr);
-      seq_ref_mb.put(bus_tr);
-      bus_tr.display("SEQ");
-    end
-  endtask  //automatic
+    // --- Specific Read (Generic) ---
+    // Used in Test2
+    task automatic specific_read(input [P_ADDR_WIDTH-1:0] i_addr);
+        automatic ReadTrans new_read_trans = new();
+        $display("[%0t]: [SEQ] Specific Read: Addr=0x%h", $time, i_addr);
+        
+        new_read_trans.m_addr = i_addr;
+        new_read_trans.m_write_en = 1'b0;
+        
+        send_trans(new_read_trans);
+    endtask
 
-  task automatic rand_write(input int num_transactions);
-    $display("[%0t]: Sequencer Rand WR start for %0d transactions", $time, num_transactions);
-    repeat (num_transactions) begin
-      automatic WriteTrans new_write_trans = new();
-      assert (new_write_trans.randomize())
-      else $error("[%0t]: Error[SEQ] => randomization failed in write_trans", $time);
-      bus_tr = new_write_trans;
-      bus_tr.ID_increment();
-      seq_drv_mb.put(bus_tr);
-      seq_ref_mb.put(bus_tr);
-      bus_tr.display("SEQ");
-    end
-  endtask  //automatic
+    // --- Stop/Reset Timer via Control ---
+    task automatic status_reset();
+        automatic WriteTrans new_write_trans = new();
+        $display("[%0t]: [SEQ] Stopping Timer (Writing 0 to Control)", $time);
+        
+        new_write_trans.m_addr = 32'h00; // CONTROL
+        new_write_trans.m_data = 32'h00; // Disable
+        new_write_trans.m_write_en = 1'b1;
+        
+        send_trans(new_write_trans);
+    endtask
 
-  task automatic specific_read(input [P_ADDR_WIDTH-1:0] i_addr);
-    ReadTrans new_read_trans = new();
-    $display("[%0t]: Sequencer Specific RD start transaction", $time);
-    new_read_trans.m_addr = i_addr;  //specific address
-    new_read_trans.m_write_en = 1'b0;
-    bus_tr = new_read_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-  endtask  //automatic
+    // =================================================================
+    //  COVERAGE CLOSURE TASKS (Targeting Missing Bins)
+    // =================================================================
+    
+    // Purpose: Perform specific operations to hit the remaining coverage holes.
+    // 1. Write to STATUS (Address 0x08) - Should be ignored/safe.
+    // 2. Read from CONTROL (Address 0x00) - Should return current config.
+    task automatic coverage_closure_test();
+        $display("\n[%0t]: [SEQ] START: Coverage Closure (Targeting Holes)", $time);
 
-  task automatic specific_write(input [P_ADDR_WIDTH-1:0] i_addr, input [P_DATA_WIDTH-1:0] i_data);
-    WriteTrans new_write_trans = new();
-    $display("[%0t]: Sequencer Specific WR start transactions", $time);
-    new_write_trans.m_addr = i_addr;  //specific address
-    new_write_trans.m_data = i_data;  //specific data
-    new_write_trans.m_write_en = 1'b1;
-    bus_tr = new_write_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-  endtask  //automatic
+        // 1. Write to STATUS (0x08)
+        // This targets the bin <write, status_addr> in kind_addr_cross
+        specific_write(32'h08, 32'hFFFFFFFF); 
 
-  task automatic basic_operation(input [P_DATA_WIDTH-1:0] i_control_data,
-                                 input [P_DATA_WIDTH-1:0] i_load_data);
-    WriteTrans new_write_trans = new();
-    ReadTrans  new_read_trans = new();
-    $display("[%0t]: Sequencer: basic operation WR start", $time);
-    $display("[%0t]: Sequencer: writing to Load reg", $time);
-    new_write_trans.m_addr = 4;  //specific address
-    new_write_trans.m_data = i_load_data;  //specific data
-    new_write_trans.m_write_en = 1'b1;
-    bus_tr = new_write_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-    $display("[%0t]: Sequencer: writing to Control reg", $time);
-    new_write_trans.m_addr = 0;  //specific address
-    new_write_trans.m_data = i_control_data;  //specific data
-    new_write_trans.m_write_en = 1'b1;
-    bus_tr = new_write_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-    $display("[%0t]: Sequencer: reading the Status reg", $time);
-    new_read_trans.m_addr = 8;  //specific address
-    new_read_trans.m_write_en = 1'b0;
-    bus_tr = new_read_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-  endtask  //automatic
+        #50;
 
-  task automatic checking_status();
-    automatic ReadTrans new_read_trans = new();
-    $display("[%0t]: Sequencer checking status", $time);
-    new_read_trans.m_addr = 8;
-    new_read_trans.m_write_en = 0;
-    bus_tr = new_read_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-  endtask  //automatic
+        // 2. Read from CONTROL (0x00)
+        // This targets the bin <read, control_addr> in kind_addr_cross
+        specific_read(32'h00);
 
-  task automatic loading(input [P_DATA_WIDTH-1:0] i_load_data);
-    automatic WriteTrans new_write_trans = new();
-    $display("[%0t]: Sequencer loading", $time);
-    new_write_trans.m_addr = 4;
-    new_write_trans.m_data = i_load_data;
-    new_write_trans.m_write_en = 1;
-    bus_tr = new_write_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-  endtask  //automatic
-
-  task automatic start_count_i_reload(input i_control_data);
-    automatic WriteTrans new_write_trans = new();
-    if (i_control_data) begin
-      $display("[%0t]: Sequencer start countdown without reload", $time);
-      new_write_trans.m_data = 32'h00000001;
-    end else begin
-      $display("[%0t]: Sequencer start countdown with reload", $time);
-      new_write_trans.m_data = 32'h00000003;
-    end
-    new_write_trans.m_addr = 0;
-    new_write_trans.m_write_en = 1;
-    bus_tr = new_write_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-  endtask  //automatic
-
-  task automatic status_reset();
-    automatic WriteTrans new_write_trans = new();
-    $display("[%0t]: Sequencer status reset", $time);
-    new_write_trans.m_addr = 0;
-    new_write_trans.m_write_en = 1;
-    new_write_trans.m_data = 32'd4;
-    bus_tr = new_write_trans;
-    bus_tr.ID_increment();
-    seq_drv_mb.put(bus_tr);
-    seq_ref_mb.put(bus_tr);
-    bus_tr.display("SEQ");
-  endtask  //automatic
+        #50;
+    endtask
 
 endclass

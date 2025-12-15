@@ -1,0 +1,17 @@
+
+--- Parsing Log File: tb_top_timer.log ---
+------------------------------------------------------------
+SIMULATION SUMMARY
+------------------------------------------------------------
+Total Transactions (PASS):   81
+Scoreboard Mismatches:       0
+Total Errors:                120
+   -> Protocol/SVA Fails:    120
+------------------------------------------------------------
+
+=== FAILURE DETAILS ===
+
+--- System/Protocol Errors (Unique) ---
+  [x120] # ** Error: [SVA] Timeout: GNT did not assert within 3 cycles of REQ!
+
+Status: FAILED [X]

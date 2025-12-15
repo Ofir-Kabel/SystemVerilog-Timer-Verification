@@ -17,7 +17,7 @@ class TbEnv;
 
         mon = new( vif , mon_sb_mb);
         drv = new( vif , seq_drv_mb, mon);
-        ref_model = new( seq_ref_mb , ref_sb_mb);
+        ref_model = new( seq_ref_mb , ref_sb_mb ,i_vif);
         sb = new( ref_sb_mb , mon_sb_mb);
  
 
@@ -27,8 +27,9 @@ class TbEnv;
     task automatic reset();
         begin
             $display("[%0t]: ENV reset",$time);
-            drv.m_bus_vif.driver_cb.req <= 0;
-            ref_model.reset_n(5);
+            // drv.m_bus_vif.driver_cb.req <= 0;
+            drv.reset_interface();
+            ref_model.reset_n();
         end
     endtask //automatic
 

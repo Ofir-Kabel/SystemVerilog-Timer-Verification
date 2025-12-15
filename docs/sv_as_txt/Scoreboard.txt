@@ -1,72 +1,85 @@
+import design_params_pkg::*;
+
 class Scoreboard;
 
   mailbox #(BusTrans) ref_sb_mb;
   mailbox #(BusTrans) mon_sb_mb;
 
-  BusTrans ref_expected_tr[int];  // Associative array for expected refs by ID
+  // המאגר של הטרנזקציות הצפויות (ממתינות לבוא המוניטור)
+  BusTrans ref_expected_tr[int]; 
 
-  // Constructor
   function new(input mailbox #(BusTrans) i_ref_score_mb, input mailbox #(BusTrans) i_mon_score_mb);
     this.ref_sb_mb = i_ref_score_mb;
     this.mon_sb_mb = i_mon_score_mb;
-  endfunction  //new()
+  endfunction 
 
   // New: Display queue status
-  task display_queue(string label);
-    $display("[%0t]: Scoreboard Queue Status (%0s) - Size: %0d", $time, label, ref_expected_tr.size());
+  task display_queue();
+    $display("[%0t]: ---- Scoreboard Queue Status ----\n[%0t]: Size: %0d", $time,$time, ref_expected_tr.size());
     foreach (ref_expected_tr[id]) begin
-      $display("            ID: %0d | ADDR: %0h | DATA: %0h | KIND: %0s",
-               id, ref_expected_tr[id].m_addr, ref_expected_tr[id].m_data, ref_expected_tr[id].m_kind);
+      ref_expected_tr[id].display("QUEUE");
     end
   endtask
 
+
+  // --- Collector Task (From Reference Model) ---
   task automatic collect_expected();
     forever begin
       BusTrans ref_tr;
-      ref_sb_mb.get(ref_tr);  // Wait for transaction from Reference Model
+      ref_sb_mb.get(ref_tr);
+      
+      // שמירה במערך האסוציאטיבי לפי ID
       ref_expected_tr[ref_tr.m_unique_id] = ref_tr;
-      ref_expected_tr[ref_tr.m_unique_id].display("SB_REF");  // Debug print
-      display_queue("After Add");  // Call after change
+      //$display("[%0t] [SB] Added Expected Trans ID: %0d", $time, ref_tr.m_unique_id);
     end
-  endtask  //collect_expected()
+  endtask 
 
+  // --- Compare Logic ---
   task automatic match_actual(input BusTrans mon_tr, input BusTrans ref_tr);
-    begin
-      // Compare transactions
-      if (mon_tr.m_unique_id != ref_tr.m_unique_id) begin
-        $display("[%0t]: Error[SB]: Transaction ID Mismatch! Ref ID: %0d, Mon ID: %0d",
-                 $time, ref_tr.m_unique_id, mon_tr.m_unique_id);
-      end else if ((ref_tr.m_addr !== mon_tr.m_addr) ||
-                   (ref_tr.m_data !== mon_tr.m_data) ||
-                   (ref_tr.m_kind !== mon_tr.m_kind)) begin
-        $display("[%0t]: Error[SB] => Scoreboard Mismatch Detected!", $time);
-        $display("[%0t]: Reference Transaction - ID:%0d ADDR: %0h, DATA: %0h, KIND: %0s",
-                 $time, ref_tr.m_unique_id, ref_tr.m_addr, ref_tr.m_data, ref_tr.m_kind);
-        $display("[%0t]: Monitor Transaction - ID:%0d ADDR: %0h, DATA: %0h, KIND: %0s",
-                 $time, mon_tr.m_unique_id, mon_tr.m_addr, mon_tr.m_data, mon_tr.m_kind);
+      bit match = 1;
+      
+      // השוואת שדות
+      if (ref_tr.m_addr !== mon_tr.m_addr) match = 0;
+      if (ref_tr.m_data !== mon_tr.m_data) match = 0;
+      if (ref_tr.m_kind !== mon_tr.m_kind) match = 0;
+      $display("[%0t]: ---- Scoreboard MATCH Status ----",$time);
+      if (match) begin
+                 $display("[%0t]: [SB]  MATCH! ID:%0d", $time, mon_tr.m_unique_id);
+                ref_tr.display("SB(REF)");
+                mon_tr.display("SB(MON)"); 
       end else begin
-        $display("[%0t]: Scoreboard Match: Transactions ID:%0d are consistent.",
-                 $time, ref_tr.m_unique_id);
+          $display("[%0t]: [SB]  MISMATCH! ID:%0d", $time, mon_tr.m_unique_id);
+                ref_tr.display("SB(REF)");
+                mon_tr.display("SB(MON)"); 
       end
-    end
-  endtask  //match_actual()
+  endtask 
 
+  // --- Main Run Task ---
   task automatic run();
-    begin
-      $display("[%0t]: Scoreboard start running..", $time);
-      fork
+    $display("[%0t]: [SB] Scoreboard Started.", $time);
+    
+    fork
+        // תהליך 1: איסוף ציפיות מהמודל
         collect_expected();
-        forever begin
-          BusTrans mon_tr;
-          mon_sb_mb.get(mon_tr);  // Wait for transaction from Monitor
-          if (ref_expected_tr.exists(mon_tr.m_unique_id)) begin
-            match_actual(mon_tr, ref_expected_tr[mon_tr.m_unique_id]);
-            ref_expected_tr.delete(mon_tr.m_unique_id);  // Free after match
-            display_queue("After Delete");  // Call after change
-          end
-        end
-      join
-    end
-  endtask  //automatic
 
-endclass  //Scoreboard
+        // תהליך 2: בדיקת דיווחים מהשטח (מוניטור)
+        forever begin
+            BusTrans mon_tr;
+            mon_sb_mb.get(mon_tr); // מחכים לדיווח מהמוניטור
+            display_queue();
+            // האם הטרנזקציה הזו צפויה? (האם המודל חזה אותה?)
+            if (ref_expected_tr.exists(mon_tr.m_unique_id)) begin
+                match_actual(mon_tr, ref_expected_tr[mon_tr.m_unique_id]);
+                
+                // מחיקה מהתור כי סיימנו איתה
+                ref_expected_tr.delete(mon_tr.m_unique_id);
+            end 
+            else begin
+                $display("[%0t]: [SB]  ERROR: Unexpected Transaction from Monitor!", $time);
+                mon_tr.display("SB(MON)");
+            end
+        end
+    join
+  endtask 
+
+endclass
