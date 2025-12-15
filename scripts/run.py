@@ -77,6 +77,7 @@ try:
     DESIGN_LAB = os.path.join(ROOT_DIR, "design")
     VERIFICATION_LAB = os.path.join(ROOT_DIR, "verification")
     SIM_LAB = os.path.join(ROOT_DIR, "sim")
+    DOCS_LAB = os.path.join(ROOT_DIR, "docs")
     SCRIPTS = os.path.join(ROOT_DIR, "scripts")
     CURRENT_TEST_FILE = os.path.join(SIM_LAB, ".current_test")
 
@@ -143,7 +144,7 @@ try:
     run_command(CMD_ELABORATE, "Elaborate")
 
     # --- Simulate ---
-    log_file = os.path.join(SIM_LAB, f"{args.test}.log")
+    log_file = os.path.join(DOCS_LAB, f"{args.test}.log")
     wlf_file = os.path.join(SIM_LAB, f"{args.test}.wlf")
     ucdb_file = os.path.join(SIM_LAB, f"{args.test}.ucdb")
     top_module = args.test + "_opt"
@@ -186,7 +187,7 @@ try:
         
         # 1. Generate Coverage Report
         print("\n--- INFO: Generating Coverage Report... ---")
-        cov_report_file = os.path.join(SIM_LAB, "coverage_report.txt")
+        cov_report_file = os.path.join(DOCS_LAB, "coverage_report.txt")
         # Use -output instead of -file (deprecated)
         cov_cmd = f"vcover report -details -cvg -output {cov_report_file} {ucdb_file}"
         
