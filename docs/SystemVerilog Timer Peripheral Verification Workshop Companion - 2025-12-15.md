@@ -73,10 +73,12 @@ style: |
 | **R8** | Unmapped addr: Read 0, Write ignored. | Random | `Random_RW_Test`. |
 
 ---
-
+# TB Architecture
+|  |  |
+| :---: | :--- |
+| ![w:900px](MidProTB_diagram.png) | **Dynamic Components:**<br>• **Sequencer:** Scenarios define.<br>• **Driver:** Drives signal through DUT using interface.<br>• **Monitor:** Samples the output of the DUT and gather it to mailbox Transaction.<br>• **Ref_Model:** Our func model according to the spec file.<br>• **Scoreboard:** compare between the expected output to the actual output.<br><br>**Structure:**<br>• **TbEnv:** Dynamic container.<br>• **BaseTest:** Test manager.<br>• **TB Top:** Physical connection. 
+---
 # 3. Verification Strategy
-
-
 
 **Methodology**
 * **Architecture:** SystemVerilog OOP Testbench.
