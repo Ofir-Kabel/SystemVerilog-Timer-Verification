@@ -64,16 +64,14 @@ ProjectFolder/
 
 1. **Clone the repository:**
 ```bash
-git clone [https://github.com/YourUsername/SystemVerilog-Timer-Verification.git](https://github.com/YourUsername/SystemVerilog-Timer-Verification.git)
-cd ProjectFolder
-
+git clone https://github.com/Ofir-Kabel/SystemVerilog-Timer-Verification.git
+cd SystemVerilog-Timer-Verification
 ```
 
 
 2. **Sort Dependencies & Compile:**
 ```bash
 python scripts/run_dependencies.py
-
 ```
 
 
@@ -84,7 +82,6 @@ python scripts/run.py
 
 # OR Run in GUI mode for debugging
 # (Select GUI option when prompted)
-
 ```
 
 
